@@ -1,0 +1,11 @@
+output
+*.zip
+video/
+scenes/
+*.avi
+__pycache__
+.idea
+.vscode
+test.py
+temp
+temp.txt
