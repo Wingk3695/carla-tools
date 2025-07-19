@@ -1,1 +1,5 @@
-python .\tools\origin_manual_control.py --vehicle_blueprint "vehicle.bmw.grandtourer" --spawn_point 9.60 -35.40 0.50 --constant_velocity 2 --sync
+python .\tools\origin_manual_control.py ^
+    --vehicle_blueprint "vehicle.bmw.grandtourer" ^
+    --spawn_point 16.35 -1 0.50 ^
+    --yaw 0 ^
+    --constant_velocity 2 --sync

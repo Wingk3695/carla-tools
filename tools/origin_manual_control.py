@@ -292,7 +292,8 @@ class World(object):
             if self.spawn_point is None:
                 spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             else:
-                spawn_point = carla.Transform(carla.Location(self.spawn_point[0], self.spawn_point[1], self.spawn_point[2]))
+                spawn_point = carla.Transform(carla.Location(self.spawn_point[0], self.spawn_point[1], self.spawn_point[2]),
+                                              carla.Rotation(yaw=self.yaw))
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             if self.player is None:
                 print('spawn actor fails')
@@ -483,7 +484,7 @@ class KeyboardControl(object):
                             world.player.open_door(carla.VehicleDoor.All)
                     except Exception:
                         pass
-                elif event.key == K_t:
+                elif event.key == K_t and not (pygame.key.get_mods() & KMOD_CTRL):
                     if world.show_vehicle_telemetry:
                         world.player.show_debug_telemetry(False)
                         world.show_vehicle_telemetry = False
@@ -500,6 +501,35 @@ class KeyboardControl(object):
                     if pygame.key.get_mods() & KMOD_CTRL:
                         index_ctrl = 9
                     world.camera_manager.set_sensor(event.key - 1 - K_0 + index_ctrl)
+                elif event.key == K_t and (pygame.key.get_mods() & KMOD_CTRL):
+                    if (world.recording_enabled):
+                        if isinstance(self._control, carla.VehicleControl):
+                            world.recording_enabled = False
+                            world.recording_save = True
+                            world.hud.notification("ctrl: Recorder is OFF")
+                        else:
+                            world.recording_enabled = False
+                            world.hud.notification("Not control a vehicle")
+                    else:
+                        if isinstance(self._control, carla.VehicleControl):
+                            if os.path.exists('control_test.json'):
+                                with open('control_test.json', 'r+', encoding='utf-8') as p:
+                                    self._controls_dic = json.load(p)
+                                if os.path.exists(f'control_test_id_{world.player.id}.npy'):
+                                    self.controls_np = np.load(f'control_test_id_{world.player.id}.npy')
+                            world.recording_enabled = True
+                            world.hud.notification("ctrl:Recorder is ON")
+                        else:
+                            world.recording_enabled = False
+                            world.hud.notification("Not control a vehicle")
+                    if world.constant_velocity_enabled:
+                        world.player.disable_constant_velocity()
+                        world.constant_velocity_enabled = False
+                        world.hud.notification("Disabled Constant Velocity Mode")
+                    else:
+                        world.player.enable_constant_velocity(carla.Vector3D(self.constant_velocity, 0, 0))
+                        world.constant_velocity_enabled = True
+                        world.hud.notification(f"Enabled Constant Velocity Mode at {self.constant_velocity * 3.6:.2f} km/h")
                 elif event.key == K_r and not (pygame.key.get_mods() & KMOD_CTRL):
                     # world.camera_manager.toggle_recording()
                     pass
@@ -1515,6 +1545,11 @@ def main():
         default=None,
         type=float,
         help='Spawn Point Location')
+    argparser.add_argument(
+        '--yaw',
+        default=0,
+        type=float,
+        help='Spawn Point Rotation')
     argparser.add_argument(
         '--constant_velocity',
         default=16.67,

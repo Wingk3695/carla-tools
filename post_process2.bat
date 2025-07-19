@@ -3,9 +3,9 @@
 python post_process.py  --num_workers 0^
                         --gpu 0^
                         --batch_size 1^
-                        --sensor_config_json "D:\heterogenenous-data-carla-main\output\test\configs\sensor_config.json"^
-                        --raw_data_dir "D:\heterogenenous-data-carla-main\output\test\raw_data"^
-                        --save_dir "D:\heterogenenous-data-carla-main\output\test\post_data"
+                        --sensor_config_json "output\test\configs\sensor_config.json"^
+                        --raw_data_dir "output\test\raw_data"^
+                        --save_dir "output\test\post_data"
 
 @REM set scene=random_objects_2
 @REM set save_name=random_objects_2
