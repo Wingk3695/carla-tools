@@ -217,6 +217,7 @@ class World(object):
         self._gamma = args.gamma
         self.vehicle_blueprint = args.vehicle_blueprint
         self.spawn_point = args.spawn_point
+        self.yaw = args.yaw
         self.constant_velocity = args.constant_velocity
         self.restart()
         self.world.on_tick(hud.on_world_tick)

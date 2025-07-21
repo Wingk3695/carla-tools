@@ -1,4 +1,6 @@
 output
+ctrl_files
+
 *.zip
 video/
 scenes/
@@ -7,5 +9,7 @@ __pycache__
 .idea
 .vscode
 test.py
+*.npy
+*.npz
 temp
 temp.txt
