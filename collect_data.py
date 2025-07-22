@@ -48,4 +48,5 @@ if __name__ == '__main__':
     split_num = 1
     
     local_val_simulator_manager.function_init_world()
+
     local_val_simulator_manager.function_start_sim_collect(parameter_split_num=split_num)

@@ -5,6 +5,7 @@ ctrl_files
 video/
 scenes/
 *.avi
+*.png
 __pycache__
 .idea
 .vscode

@@ -52,6 +52,11 @@ class ClassSimulatorManager(object):
         self.local_val_client_socket, _ = self.local_val_tcp_server_socket.accept()
         print('SOCKET')
 
+        # 创建 TCP 客户端并连接本地 6666 端口
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(("127.0.0.1", 2333))  # 触发目标代码的 accept() 解除阻塞
+        client.close()  # 立即关闭连接
+
         self.local_val_save_path = parameter_path_save
         self.local_val_world_settings = None
         self.local_val_origin_world_settings = None
