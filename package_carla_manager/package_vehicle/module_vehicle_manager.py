@@ -214,6 +214,7 @@ class ClassVehicleManager(object):
             local_val_control_array = None
             local_val_constant_velocity = None
             if local_val_vehicle_config['drive_type'] == ENumDriveType.FILE_CONTROL_STEER:
+                print(local_val_vehicle_config['drive_file'])
                 local_val_control_array = np.load(local_val_vehicle_config['drive_file'])
                 local_val_constant_velocity = carla.Vector3D(x=local_val_vehicle_config['constant_velocity'][0],
                                                              y=local_val_vehicle_config['constant_velocity'][1],

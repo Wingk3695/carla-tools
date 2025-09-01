@@ -6,7 +6,7 @@ numpy.random.seed(111)
 
 if __name__ == '__main__':
     
-    name = 'small_object_dataset'
+    name = 'test'
     local_val_simulator_manager = ClassSimulatorManager(
         parameter_host='127.0.0.1',
         parameter_port=2000,

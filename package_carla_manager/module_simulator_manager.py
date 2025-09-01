@@ -6,6 +6,7 @@ from tqdm import tqdm
 import sys
 import keyboard
 import socket
+import json
 
 # read configs from json file.
 from .module_file_reader import function_get_map_json, function_get_weather_json
@@ -26,6 +27,8 @@ from .package_sensor import instance_var_sensor_manager as global_val_sensor_man
 from .module_spectator_manager import instance_var_spectator_manager as global_val_spectator_manager
 
 from .module_signal_control import function_get_global_signal
+
+from . import dynamic_object_manager as dom
 
 class ClassSimulatorManager(object):
 
@@ -52,10 +55,10 @@ class ClassSimulatorManager(object):
         self.local_val_client_socket, _ = self.local_val_tcp_server_socket.accept()
         print('SOCKET')
 
-        # 创建 TCP 客户端并连接本地 6666 端口
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.connect(("127.0.0.1", 2333))  # 触发目标代码的 accept() 解除阻塞
-        client.close()  # 立即关闭连接
+        # # 创建 TCP 客户端并连接本地 6666 端口
+        # client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # client.connect(("127.0.0.1", 2333))  # 触发目标代码的 accept() 解除阻塞
+        # client.close()  # 立即关闭连接
 
         self.local_val_save_path = parameter_path_save
         self.local_val_world_settings = None
@@ -65,6 +68,10 @@ class ClassSimulatorManager(object):
         self.local_val_port = parameter_port
         self.local_val_client = carla.Client(self.local_val_host, self.local_val_port)# get client
         self.local_val_client.set_timeout(parameter_client_timeout)  # Default 20s timeout
+        
+        # 添加一个新变量来追踪上一帧生成的物体
+        self.last_spawned_prop_ids = []
+
         self.local_val_scene_config_path = parameter_path_scene
         self.local_val_sensor_config_path = parameter_path_sensor
         global_val_spectator_manager.function_register_spectator(self.local_val_client.get_world())
@@ -102,7 +109,21 @@ class ClassSimulatorManager(object):
                                parameter_sensor_config):
         local_val_counter = 0
         try:
-            
+            # --- 新增：读取动态物体配置 ---
+            try:
+                with open(self.local_val_scene_config_path, 'r') as f:
+                    scene_config = json.load(f)
+                dynamic_props_config = scene_config.get('dynamic_props_setting', {})
+            except (FileNotFoundError, json.JSONDecodeError):
+                print(f"Warning: Could not read dynamic props config from {self.local_val_scene_config_path}")
+                dynamic_props_config = {}
+
+            props_enabled = dynamic_props_config.get('enabled', False)
+            props_count = dynamic_props_config.get('count', 20)
+            props_radius = dynamic_props_config.get('radius', 50.0)
+            if props_enabled:
+                print(f"\033[1;36m[动态物体生成已启用] 数量: {props_count}, 半径: {props_radius}\033[0m")
+            # --- 配置读取结束 ---
             self.local_val_client_socket.send("reset".encode())
             time.sleep(0.05)
             # self.local_val_client_socket.send("flush".encode())
@@ -139,7 +160,7 @@ class ClassSimulatorManager(object):
             global_var_vehicle_manager.function_init_vehicles(self.local_val_client)  # init vehicles state
 
             # skip frames that do not need saving
-            print('\033[1;35m Sikp Unused Frames\033[0m')
+            print('\033[1;35m Skip Unused Frames\033[0m')
             while local_val_counter < local_val_frame_start:
                 global_var_vehicle_manager.function_flush_vehicles(self.local_val_client) # flush
                 self.local_val_client_socket.send("flush".encode())
@@ -154,16 +175,62 @@ class ClassSimulatorManager(object):
                 pbar.set_description(f'Processing')
                 
                 while (not function_get_global_signal()) and (local_val_frame_start <= local_val_frame_end):
+                    
+                    # --- 动态物体生成/销毁逻辑 ---
+                    if props_enabled:
+                        # 1. 销毁上一帧的物体
+                        dom.destroy_props(self.local_val_client, self.last_spawned_prop_ids)
+                        self.last_spawned_prop_ids.clear()
+
+                        # 2. 查找Hero
+                        hero_actor = dom.find_hero_actor(self.local_val_client.get_world())
+
+                        if hero_actor:
+                            # 3. 如果找到Hero，使用配置参数生成新物体
+                            self.last_spawned_prop_ids = dom.spawn_props_near_hero(
+                                world=self.local_val_client.get_world(),
+                                client=self.local_val_client,
+                                hero_actor=hero_actor,
+                                radius=props_radius,
+                                num_props=props_count
+                            )
+                        else:
+                            # 4. 如果找不到Hero，打印信息并准备退出
+                            print("警告：未找到Hero车辆，动态生成已停止。")
+                            if not self.last_spawned_prop_ids:
+                                break
+                    # --- 逻辑结束 ---
+
+
                     # flush vehicle state
                     global_val_spectator_manager.function_flush_state()
                     global_var_vehicle_manager.function_flush_vehicles(self.local_val_client)
+                    # vehicles_list, walkers_list, all_id = generate_traffic(
+                    #     host='127.0.0.1',
+                    #     port=2000,
+                    #     tm_port=8000,
+                    #     number_of_vehicles=0 ,
+                    #     number_of_walkers=100,
+                    #     asynch=False,
+                    #     hero=False,
+                    #     car_lights_on=False,
+                    #     exclude_spawn_points=[154] # 移除特定的生成点。这里的154是我们采集车的出发点
+                    # )
                     self.local_val_client_socket.send("flush".encode())
                     time.sleep(0.05)
                     self.local_val_client.get_world().tick()  # tick the world
-                    
                     if global_val_sensor_manager.function_sync_sensors():  # check sensor data receive ready or not
                         local_val_frame_start += 1
-                        pbar.update(1)           
+                        pbar.update(1)
+                        # destroy_traffic(
+                        #     host='127.0.0.1',
+                        #     port=2000,
+                        #     vehicles_list=vehicles_list,
+                        #     walkers_list=walkers_list,
+                        #     all_id=all_id,
+                        #     asynch=False,
+                        #     synchronous_master=True
+                        # )           
                     else:
                         raise Exception('funciton_sync_sensors error') 
         finally:
@@ -175,6 +242,13 @@ class ClassSimulatorManager(object):
             #     self.local_val_client.reload_world(reset_settings=False)
             #     print('\033[1;31m[Receive Exit Signal] Exit Main Process Bye!\033[0m')
             #     sys.exit()
+
+            # 在销毁传感器和车辆之前，确保最后生成的动态物体也被销毁
+            if self.last_spawned_prop_ids:
+                print('\033[1;35m[Destroy All Dynamic Props]\033[0m')
+                dom.destroy_props(self.local_val_client, self.last_spawned_prop_ids)
+                self.last_spawned_prop_ids.clear()
+
 
             # destroy all sensors
             

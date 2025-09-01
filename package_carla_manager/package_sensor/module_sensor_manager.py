@@ -267,6 +267,8 @@ class ClassSensorManager(object):
             local_val_blueprint = parameter_blueprint_library.find('sensor.camera.rgb')
         elif "depth" in parameter_sensor_config['name_id']:
             local_val_blueprint = parameter_blueprint_library.find('sensor.camera.depth')
+        elif "semantic" in parameter_sensor_config['name_id']:
+            local_val_blueprint = parameter_blueprint_library.find('sensor.camera.semantic_segmentation')
 
         # according to the config, set the blueprint
         local_val_blueprint.set_attribute('image_size_x', parameter_sensor_config['image_size']['width'])
@@ -314,6 +316,7 @@ class ClassSensorManager(object):
         """
         local_val_blueprint_library = parameter_client.get_world().get_blueprint_library()
         local_val_world = parameter_client.get_world()
+
         for local_val_sensor_config in parameter_sensor_configs:
             local_val_blueprint, local_val_transform, local_val_attach = self._function_get_spawn(
                 local_val_sensor_config,
@@ -322,12 +325,12 @@ class ClassSensorManager(object):
             local_val_actor = local_val_world.spawn_actor(local_val_blueprint,
                                                           local_val_transform,
                                                           local_val_attach)
-            if local_val_sensor_config['name_id'][0:2] == 'cm':
+            if local_val_sensor_config['name_id'][0:2] == 'cm': # cubemap
                 self.__local_val_sensors.append(ClassCubeSensorUnit(local_val_sensor_config['name_id'],
                                                                     parameter_save_frames,
                                                                     local_val_blueprint,
                                                                     local_val_actor))
-            elif local_val_sensor_config['name_id'][0:2] == 'ph':
+            elif local_val_sensor_config['name_id'][0:2] == 'ph': # pinhole
                 self.__local_val_sensors.append(ClassSensorUnit(local_val_sensor_config['name_id'],
                                                                 parameter_save_frames,
                                                                 local_val_actor))

@@ -1,0 +1,42 @@
+# ----------------------------------------------------
+# 各种图像干扰效果的参数配置文件
+# ----------------------------------------------------
+
+# 1. 复杂污损 (Complex Smudge)
+smudge_complex:
+  num_blotches_min: 5      # 构成一个污渍团的最小污渍数量
+  num_blotches_max: 8      # ...最大数量
+  radius_min: 10           # 单个小污渍的最小半径
+  radius_max: 45           # ...最大半径
+  offset_max: 40           # 小污渍相对于中心的偏移量
+  blur_kernel_min: 15      # 污渍遮罩的最小模糊核大小 (必须是奇数)
+  blur_kernel_max: 51      # ...最大模糊核大小 (必须是奇数)
+  alpha_min: 0.4           # 污渍的最小不透明度
+  alpha_max: 0.75          # ...最大不透明度
+
+# 2. 运动模糊 (Motion Blur)
+motion_blur:
+  size_min: 1              # 运动模糊核的最小尺寸
+  size_max: 1             # ...最大尺寸
+
+# 3. 眩光 (Glare)
+glare:
+  radius_min: 50           # 眩光半径的最小值
+  radius_max: 100          # ...最大值
+  brightness_min: 0.7      # 眩光的最小亮度
+  brightness_max: 1.3      # ...最大亮度
+  blur_amount_min: 101     # 眩光模糊核的最小尺寸 (必须是奇数)
+  blur_amount_max: 251     # ...最大尺寸 (必须是奇数)
+
+# 4. 局部模糊点 (Local Blur Spots) - 新效果！
+local_blur_spots:
+  num_spots_min: 5         # 模糊点的最小数量
+  num_spots_max: 10        # ...最大数量
+  radius_min: 20           # 模糊点的最小半径
+  radius_max: 80           # ...最大半径
+  # 用于模糊图像本身的核大小，值越大，模糊区域越朦胧
+  image_blur_kernel_min: 31 # (必须是奇数)
+  image_blur_kernel_max: 81 # (必须是奇数)
+  # 用于羽化模糊区域边缘的核大小，值越大，边缘越柔和
+  mask_blur_kernel_min: 21  # (必须是奇数)
+  mask_blur_kernel_max: 91  # (必须是奇数)

@@ -140,6 +140,19 @@ Skip Frames [0, "frame_start")
 
 The sensors in the scene are controlled by the "sensor_manager", and before the next frame of world operation in the simulator, the "sensor_manager" will collect raw data according to the settings in the "JSON" configuration file. The collected cubemap images can be converted into pinhole, fisheye, ERP projection images, etc. in the post-processing step, or pinhole images can be directly collected, and all cameras can collect depth images.
 
+```py
+class EnumCamModel(IntEnum):
+    PINHOLE = 0
+    FISHEYE = 1
+    ERP = 2
+    OCAM = 3
+    CASSINI = 4
+
+class EnumTargetType(IntEnum):
+     DEPTH = 0
+     RGB = 1 
+```
+
 ```json
 "sensors": [
     {

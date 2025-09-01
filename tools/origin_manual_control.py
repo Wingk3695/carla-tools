@@ -217,7 +217,7 @@ class World(object):
         self._gamma = args.gamma
         self.vehicle_blueprint = args.vehicle_blueprint
         self.spawn_point = args.spawn_point
-        self.yaw = args.yaw
+        self.spawn_point_direction = args.spawn_point_direction
         self.constant_velocity = args.constant_velocity
         self.restart()
         self.world.on_tick(hud.on_world_tick)
@@ -294,7 +294,7 @@ class World(object):
                 spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             else:
                 spawn_point = carla.Transform(carla.Location(self.spawn_point[0], self.spawn_point[1], self.spawn_point[2]),
-                                              carla.Rotation(yaw=self.yaw))
+                                              carla.Rotation(pitch=self.spawn_point_direction[0], yaw=self.spawn_point_direction[1], roll=self.spawn_point_direction[2]))
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             if self.player is None:
                 print('spawn actor fails')
@@ -1547,8 +1547,9 @@ def main():
         type=float,
         help='Spawn Point Location')
     argparser.add_argument(
-        '--yaw',
-        default=0,
+        '--spawn_point_direction',
+        nargs='+',
+        default=None,
         type=float,
         help='Spawn Point Rotation')
     argparser.add_argument(

@@ -1,11 +1,14 @@
 @echo off
 
-python post_process.py  --num_workers 0^
+set scene=test
+
+
+python post_process.py  --num_workers 2^
                         --gpu 0^
-                        --batch_size 1^
-                        --sensor_config_json "output\test\configs\sensor_config.json"^
-                        --raw_data_dir "output\test\raw_data"^
-                        --save_dir "output\test\post_data"
+                        --batch_size 4^
+                        --sensor_config_json "output\%scene%\configs\sensor_config_old.json"^
+                        --raw_data_dir "H:\%scene%\raw_data"^
+                        --save_dir "H:\%scene%\post_data"
 
 @REM set scene=random_objects_2
 @REM set save_name=random_objects_2

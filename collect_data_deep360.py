@@ -6,14 +6,14 @@ numpy.random.seed(111)
 
 if __name__ == '__main__':
     
-    name = 'small_object_dataset'
+    name = 'deep360'
     local_val_simulator_manager = ClassSimulatorManager(
         parameter_host='127.0.0.1',
         parameter_port=2000,
-        parameter_path_sensor=rf'output\{name}\configs\sensor_config_old.json',
-        parameter_path_scene=rf'output\{name}\configs\scene_config_old.json',
+        parameter_path_sensor=rf'output\{name}\configs\sensor_config.json',
+        parameter_path_scene=rf'output\{name}\configs\scene_config.json',
         # parameter_path_save=rf'output\{name}\raw_data',
-        parameter_path_save=rf'H:{name}\raw_data',
+        parameter_path_save=rf'F:{name}\raw_data1',
     )
     split_num = 1
 
