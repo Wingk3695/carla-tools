@@ -46,6 +46,33 @@ if __name__ == "__main__":
     # result = cv2.hconcat([np.abs(imgL.astype(np.float32) - imgRwarp.astype(np.float32)).astype(np.uint8)])
     result = cv2.hconcat([imgL, imgRwarp])
 
+    diff = np.abs(imgL.astype(np.float32) - imgRwarp.astype(np.float32)).astype(np.uint8)
+    diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+    diff_color = cv2.applyColorMap(diff_gray, cv2.COLORMAP_INFERNO)
+
+    # Create a color bar
+    bar_height = diff_color.shape[0]
+    bar_width = 40
+    bar = np.linspace(0, 255, bar_height).astype(np.uint8)
+    bar = np.repeat(bar[:, np.newaxis], bar_width, axis=1)
+    bar_color = cv2.applyColorMap(bar, cv2.COLORMAP_JET)
+
+    # Add multiple value labels on the bar
+    num_labels = 5
+    for i in range(num_labels):
+        y = bar_height - int(i * bar_height / (num_labels - 1))
+        value = int(i * 255 / (num_labels - 1))
+        bar_color = cv2.putText(
+            bar_color, str(value), (5, y - 5),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1
+        )
+
+    # Concatenate bar to the right of diff_color
+    diff_with_bar = cv2.hconcat([diff_color, bar_color])
+
+    cv2.imwrite("diff_inferno.png", diff_with_bar)
+    cv2.imwrite("diff.png", diff_gray)
+
     cv2.namedWindow("result",0)
     cv2.imshow("result", result)
 
@@ -55,6 +82,9 @@ if __name__ == "__main__":
             break
         elif key == ord('e'):
             exit(0)
+
+
+
     mse = np.mean((imgL - imgRwarp) ** 2)
 
     print(10 * np.log10((imgRwarp.max() ** 2) / mse))

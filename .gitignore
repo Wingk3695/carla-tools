@@ -17,3 +17,7 @@ temp.txt
 
 camera_*.json
 camera*.txt
+
+*.7z
+CT*
+REF*

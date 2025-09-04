@@ -9,14 +9,14 @@ numpy.random.seed(111)
 
 if __name__ == '__main__':
     
-    name = 'deep360'
+    name = 'test'
     local_val_simulator_manager = ClassSimulatorManager(
         parameter_host='127.0.0.1',
         parameter_port=2000,
-        parameter_path_sensor=rf'output\{name}\configs\sensor_config.json',
-        parameter_path_scene=rf'output\{name}\configs\scene_config_Town07.json',
+        parameter_path_sensor=rf'output\{name}\configs\sensor_config_old.json',
+        parameter_path_scene=rf'output\{name}\configs\scene_config_old.json',
         # parameter_path_save=rf'output\{name}\raw_data',
-        parameter_path_save=rf'F:{name}\raw_data_Town07',
+        parameter_path_save=rf'H:{name}\raw_data',
     )
     split_num = 1
     # 改变world当中资产的自定义深度
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         car_lights_on=False,
         # exclude_spawn_points=[154] # 移除特定的生成点。这里的154是我们采集车的出发点
     )
-    local_val_simulator_manager.function_start_sim_collect(parameter_split_num=split_num)
+    local_val_simulator_manager.function_start_sim_collect(parameter_split_num=split_num, folder_name=name)
     destroy_traffic(
         host='127.0.0.1',
         port=2000,

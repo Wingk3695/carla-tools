@@ -13,7 +13,7 @@ def find_hero_actor(world: carla.World) -> carla.Actor or None: # type: ignore
             return actor
     return None
 
-def spawn_props_near_hero(world: carla.World, client: carla.Client, hero_actor: carla.Actor, radius: float, num_props: int) -> list:
+def spawn_props_near_hero(world: carla.World, client: carla.Client, hero_actor: carla.Actor, radius: float, num_props: int, folder_name: str) -> list:
     """
     在 Hero 车辆周围的指定半径内生成一批静态物体。
     :param world: CARLA 世界对象。
@@ -29,19 +29,27 @@ def spawn_props_near_hero(world: carla.World, client: carla.Client, hero_actor: 
 
     if not blueprints:
         print("警告：找不到任何 'static.prop.*' 蓝图。")
-        return []
+        return [], []
 
     batch = []
+    spawn_locations = []
     for _ in range(num_props):
         # 计算随机生成点
-        offset = np.random.uniform(-radius, radius, size=2)
-        spawn_location = carla.Location(
-            hero_location.x + offset[0],
-            hero_location.y + offset[1],
-            hero_location.z + 1.0  # 在地面上方一点，防止生成到地下
-        )
-        spawn_transform = carla.Transform(spawn_location)
+        flag = True
+        while flag:
+            offset = np.random.uniform(0, radius, size=2)
+            offset_z = np.random.uniform(1, radius)
+            if offset[0]**2 + offset[1]**2 + offset_z**2 <= radius**2:
+                if offset[0]**2 + offset[1]**2 + offset_z**2 >= 0.25 * radius**2:
+                    flag = False
+            spawn_location = carla.Location(
+                hero_location.x + offset[0] / 4,
+                hero_location.y + offset[1],
+                hero_location.z + offset_z  # 在地面上方一点，防止生成到地下
+            )
         
+        spawn_transform = carla.Transform(spawn_location)
+        # spawn_locations.append([spawn_location.x, spawn_location.y, spawn_location.z])
         blueprint = random.choice(blueprints)
         batch.append(carla.command.SpawnActor(blueprint, spawn_transform))
 

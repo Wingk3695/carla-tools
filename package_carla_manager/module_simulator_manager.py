@@ -8,6 +8,9 @@ import keyboard
 import socket
 import json
 
+import numpy as np
+import os
+
 # read configs from json file.
 from .module_file_reader import function_get_map_json, function_get_weather_json
 from .module_file_reader import function_get_vehicle_json_list, function_get_sensor_json_list
@@ -71,6 +74,7 @@ class ClassSimulatorManager(object):
         
         # 添加一个新变量来追踪上一帧生成的物体
         self.last_spawned_prop_ids = []
+        self.spawned_prop_ids = []
 
         self.local_val_scene_config_path = parameter_path_scene
         self.local_val_sensor_config_path = parameter_path_sensor
@@ -106,7 +110,7 @@ class ClassSimulatorManager(object):
 
 
     def _function_sim_one_step(self,
-                               parameter_sensor_config):
+                               parameter_sensor_config, folder_name):
         local_val_counter = 0
         try:
             # --- 新增：读取动态物体配置 ---
@@ -178,10 +182,9 @@ class ClassSimulatorManager(object):
                     
                     # --- 动态物体生成/销毁逻辑 ---
                     if props_enabled:
-                        # 1. 销毁上一帧的物体
                         dom.destroy_props(self.local_val_client, self.last_spawned_prop_ids)
                         self.last_spawned_prop_ids.clear()
-
+                        
                         # 2. 查找Hero
                         hero_actor = dom.find_hero_actor(self.local_val_client.get_world())
 
@@ -192,7 +195,8 @@ class ClassSimulatorManager(object):
                                 client=self.local_val_client,
                                 hero_actor=hero_actor,
                                 radius=props_radius,
-                                num_props=props_count
+                                num_props=props_count,
+                                folder_name=folder_name,
                             )
                         else:
                             # 4. 如果找不到Hero，打印信息并准备退出
@@ -219,9 +223,28 @@ class ClassSimulatorManager(object):
                     self.local_val_client_socket.send("flush".encode())
                     time.sleep(0.05)
                     self.local_val_client.get_world().tick()  # tick the world
-                    if global_val_sensor_manager.function_sync_sensors():  # check sensor data receive ready or not
+                    if self.last_spawned_prop_ids:
+                        # 1. 获取并保存物体的世界绝对坐标
+                        actor_list = self.local_val_client.get_world().get_actors(self.last_spawned_prop_ids)
+                        print(f"\033[1;35m[上一帧生成的物体] 数量: {len(self.last_spawned_prop_ids)}\033[0m")
+                        for actor in actor_list:
+                            # print(f"  Actor ID: {actor.id}, Type: {actor.type_id}")
+                            print(f"{pbar.n}    Location: {actor.get_location()}")
+                        current_frame_locations = []
+                        for actor in actor_list:
+                            if actor:
+                                loc = actor.get_location()
+                                current_frame_locations.append([loc.x, loc.y, loc.z])
+                        
+                        os.makedirs(f"H:/{folder_name}/raw_data/spawn_locations", exist_ok=True)
+                        np.savez_compressed(f'H:/{folder_name}/raw_data/spawn_locations/spawn_locations_{pbar.n}.npz', arr_0=np.array(current_frame_locations))
+           
+                    if global_val_sensor_manager.function_sync_sensors():  # check sensor data receive ready or not                 
                         local_val_frame_start += 1
                         pbar.update(1)
+                        # os.makedirs(f"H:/{folder_name}/raw_data/spawn_locations", exist_ok=True)
+                        # np.savez_compressed(f'H:/{folder_name}/raw_data/spawn_locations/spawn_locations_{pbar.n}.npz', np.array(self.spawned_prop_ids))
+                        # self.spawned_prop_ids.clear()
                         # destroy_traffic(
                         #     host='127.0.0.1',
                         #     port=2000,
@@ -273,7 +296,7 @@ class ClassSimulatorManager(object):
                 sys.exit()
             
     def function_start_sim_collect(self,
-                                   parameter_split_num: int = 4):
+                                   parameter_split_num: int = 4, folder_name: str="prop_log"):
         
         local_val_sensor_configs = function_get_sensor_json_list(self.local_val_sensor_config_path)
         
@@ -295,7 +318,7 @@ class ClassSimulatorManager(object):
                 # get sensors
                 local_val_part_sensors = [item['name_id'] for item in local_val_part]
                 print(f'\033[1;32m[Part {i+1}]:\033[0m', '    ', f'\033[1;33m{str(local_val_part_sensors)}\033[0m')
-                self._function_sim_one_step(local_val_part)
+                self._function_sim_one_step(local_val_part, folder_name=folder_name)
                 gc.collect()
                 time.sleep(3.0)
                    
