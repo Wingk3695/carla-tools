@@ -53,44 +53,42 @@ def vis_semantic_png(png_path, out_path=None):
     img = cv2.imread(png_path, cv2.IMREAD_UNCHANGED)
     type_img = img[:, :, 2] if img.shape[2] == 3 else img[:, :, 0]  # R通道
     color_img = semantic_to_cityscapes_color(type_img)
-    spawn_locations = np.load(r"H:\test\raw_data\spawn_locations\spawn_locations_2.npz")['arr_0']
+    spawn_locations = np.load(r"H:\small_object_dataset\raw_data\spawn_locations\spawn_locations_10.npz")['arr_0']
     focal = img.shape[0] / (2.0 * np.tan(60 * np.pi / 360.0))
     K = np.identity(3)
     K[0, 0] = K[1, 1] = focal
     K[0, 2] = img.shape[1] / 2.0
     K[1, 2] = img.shape[0] / 2.0
-    P = np.load(r"H:\test\raw_data\cm_rgb0\cm_rgb0_4.npz")['ex_matrix']
-    print(K, P)
-    carla_cam_to_cv_cam = np.array([
-        [ 0,  -1,  0],  # CV X = -CARLA Y
-        [ 0,  0, 1],  # CV Y = CARLA Z
-        [ -1,  0,  0]   # CV Z = -CARLA X
-    ])
+    P = np.load(r"H:\small_object_dataset\raw_data\cm_rgb0\cm_rgb0_10.npz")['ex_matrix']
+    # print(K, P)
     original_img = color_img.copy()
     for loc in spawn_locations:
         # loc = [31.264967, -24.471399, 20.864706]
         tmp = np.linalg.inv(P) @ np.array([loc[0], loc[1], loc[2], 1])
-        print(tmp)
+        # print(tmp)
         cords_x_y_z = tmp[:3]
         cords_y_minus_z_x = np.array([cords_x_y_z[1], -cords_x_y_z[2], cords_x_y_z[0]])
         if cords_y_minus_z_x[2] <= 0:
             continue
+        depth = np.load(r"H:\small_object_dataset\post_data\pinhole\ph_depth0_10.npz")['arr_0'].squeeze(0)
         pixel = K @ cords_y_minus_z_x[:3]
-        print(pixel)
+        # print(pixel)
         loc_x = int(pixel[0] / pixel[2])
         loc_y = int(pixel[1] / pixel[2])
-        print(loc_x, loc_y)
-        if loc_x >= 0 and loc_x < color_img.shape[0] and loc_y >= 0 and loc_y < color_img.shape[1]:
+        # 修正边界判断
+        if 0 <= loc_x < color_img.shape[1] and 0 <= loc_y < color_img.shape[0]:
+            if cords_y_minus_z_x[2] > depth[loc_y, loc_x]:
+                continue
             cv2.circle(img=color_img, 
-                            center=(loc_x, loc_y), 
-                            radius=5,           # 圆的半径，可以调整大小
-                            color=(255, 255, 255), # 白色
-                            thickness=-1)
+                       center=(loc_x, loc_y), 
+                       radius=1,
+                       color=(255, 255, 255),
+                       thickness=-1)
     cv2.imshow('Cityscapes Semantic', np.concatenate([original_img, color_img], axis=1))
     if out_path:
-        cv2.imwrite(out_path, color_img)
+        cv2.imwrite(out_path, np.concatenate([original_img, color_img], axis=1))
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    vis_semantic_png(r"H:\test\post_data\pinhole\ph_semantic0_4.png", "cityscapes_vis.png")
+    vis_semantic_png(r"H:\small_object_dataset\post_data\pinhole\ph_semantic0_10.png", "cityscapes_vis.png")

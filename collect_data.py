@@ -11,7 +11,7 @@ if __name__ == '__main__':
         parameter_host='127.0.0.1',
         parameter_port=2000,
         parameter_path_sensor=rf'output\{name}\configs\sensor_config_old.json',
-        parameter_path_scene=rf'output\{name}\configs\scene_config_old.json',
+        parameter_path_scene=rf'output\{name}\configs\scene_config_old_sunny.json',
         # parameter_path_save=rf'output\{name}\raw_data',
         parameter_path_save=rf'H:{name}\raw_data',
     )
@@ -50,4 +50,4 @@ if __name__ == '__main__':
     
     local_val_simulator_manager.function_init_world()
 
-    local_val_simulator_manager.function_start_sim_collect(parameter_split_num=split_num)
+    local_val_simulator_manager.function_start_sim_collect(parameter_split_num=split_num, folder_name=name)

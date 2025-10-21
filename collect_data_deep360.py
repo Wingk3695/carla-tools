@@ -11,9 +11,9 @@ if __name__ == '__main__':
         parameter_host='127.0.0.1',
         parameter_port=2000,
         parameter_path_sensor=rf'output\{name}\configs\sensor_config.json',
-        parameter_path_scene=rf'output\{name}\configs\scene_config.json',
+        parameter_path_scene=rf'output\{name}\configs\scene_config_Town10.json',
         # parameter_path_save=rf'output\{name}\raw_data',
-        parameter_path_save=rf'F:{name}\raw_data1',
+        parameter_path_save=rf'F:{name}\raw_data_Town10',
     )
     split_num = 1
 

@@ -12,3 +12,4 @@ class EnumCamModel(IntEnum):
 class EnumTargetType(IntEnum):
      DEPTH = 0
      RGB = 1 
+     SEMANTIC = 2

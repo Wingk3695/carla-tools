@@ -14,6 +14,30 @@ import yaml
 
 # --- 新增辅助函数 ---
 
+def create_direction_map(height, width):
+    """
+    为ERP图像预计算一个“方向查找图”。
+    对每个像素 (v, u)，计算其对应的三维单位方向向量 (x, y, z)。
+    返回一个形状为 (height, width, 3) 的Numpy数组。
+    """
+    # 创建像素坐标网格, v 对应纬度, u 对应经度
+    v_coords, u_coords = np.mgrid[0:height, 0:width]
+    
+    # 将像素坐标转换为球面坐标 (theta, phi)
+    # theta (极角, 纬度) 范围 [0, pi]
+    # phi (方位角, 经度) 范围 [0, 2*pi]
+    theta = v_coords / (height - 1) * np.pi
+    phi = u_coords / (width - 1) * 2.0 * np.pi
+    
+    # 从球面坐标转换为笛卡尔坐标 (x, y, z)
+    # 标准数学约定: Z轴向上
+    x = np.sin(theta) * np.cos(phi)
+    y = np.sin(theta) * np.sin(phi)
+    z = np.cos(theta)
+    
+    # 将 x, y, z 堆叠成一个 (h, w, 3) 的数组
+    return np.stack([x, y, z], axis=-1)
+
 def get_mask_area_ratio(mask, image_shape):
     """计算单通道遮罩的有效面积占图像总面积的比例。"""
     if mask is None:
@@ -24,6 +48,136 @@ def get_mask_area_ratio(mask, image_shape):
     total_area = image_shape[0] * image_shape[1]
     
     return effective_area / total_area if total_area > 0 else 0.0
+
+def _draw_wrapped_circle(mask, cx, cy, radius, color, thickness=-1):
+    h, w = mask.shape[:2]
+    
+    # 绘制原始位置
+    cv2.circle(mask, (int(cx), int(cy)), radius, color, thickness)
+    
+    # 四个方向的环绕（考虑可能同时超出多个边）
+    offsets = [
+        (w, 0), (-w, 0),     # 左右
+        (0, h), (0, -h),     # 上下
+        (w, h), (w, -h),     # 四个角
+        (-w, h), (-w, -h)
+    ]
+    
+    for dx, dy in offsets:
+        new_cx, new_cy = cx + dx, cy + dy
+        # 只有当新圆心可能导致可见部分时才绘制（可选优化）
+        cv2.circle(mask, (int(new_cx), int(new_cy)), radius, color, thickness)
+
+def gaussian_blur_wrap_fast(src, ksize, sigmaX=0, sigmaY=0):
+    """快速、正确的 wrap 高斯模糊"""
+    if src.ndim != 2:
+        raise ValueError("Input must be 2D (single channel)")
+    h, w = src.shape
+    pad_x = ksize[1] // 2
+    pad_y = ksize[0] // 2
+
+    # 使用 numpy 的 wrap padding（高效且正确）
+    padded = np.pad(src, ((pad_y, pad_y), (pad_x, pad_x)), mode='wrap')
+    
+    # 模糊（此时边界已 wrap，无需特殊 borderType）
+    blurred = cv2.GaussianBlur(padded, ksize, sigmaX, sigmaY)
+    
+    return blurred[pad_y:pad_y+h, pad_x:pad_x+w]
+
+def gaussian_blur_wrap_fast_color(src, ksize, sigmaX=0, sigmaY=0):
+    """对彩色图像每个通道分别做wrap高斯模糊"""
+    if src.ndim == 2:
+        return gaussian_blur_wrap_fast(src, ksize, sigmaX, sigmaY)
+    elif src.ndim == 3:
+        channels = [gaussian_blur_wrap_fast(src[..., i], ksize, sigmaX, sigmaY) for i in range(src.shape[2])]
+        return np.stack(channels, axis=2)
+    else:
+        raise ValueError("Input must be 2D or 3D (color image)")
+
+
+def generate_effect_mask_3d(image_shape, config, effect_function_name, direction_map):
+    """
+    (新版本 V2) 在球面上为单个效果生成其对应的遮罩。
+    这个版本实现了“先画实心，后模糊”的逻辑，以创建团簇效果。
+    """
+    h, w = image_shape[:2]
+    
+    # 创建一个用于绘制“实心”形状的空白遮罩
+    solid_mask = np.zeros((h, w), dtype=np.float32)
+
+    if effect_function_name == 'smudge_complex':
+        params = config['smudge_complex']
+        
+        # 1. 确定团簇的中心方向
+        cluster_center_direction = np.random.randn(3)
+        cluster_center_direction /= np.linalg.norm(cluster_center_direction)
+
+        num_blotches = random.randint(params['num_blotches_min'], params['num_blotches_max'])
+        
+        for _ in range(num_blotches):
+            # 2. 在中心方向附近创建一个小的随机偏移，生成子污点方向
+            offset_vec = np.random.randn(3) * (params.get('offset_max_angular', 0.1)) # 使用新的角偏移参数
+            blotch_center_direction = cluster_center_direction + offset_vec
+            blotch_center_direction /= np.linalg.norm(blotch_center_direction)
+
+            # 3. 计算角距离并绘制“实心”圆
+            dot_product = np.einsum('ijk,k->ij', direction_map, blotch_center_direction)
+            angular_distances = np.arccos(np.clip(dot_product, -1.0, 1.0))
+            
+            radius_pixels = random.randint(params['radius_min'], params['radius_max'])
+            angular_radius = (radius_pixels / w) * np.pi
+            
+            # 将实心圆合并到 solid_mask 中
+            solid_mask[angular_distances < angular_radius] = 1.0
+
+        # 4. 对整个团簇进行一次性模糊
+        blur_kernel_size = _get_odd_random(params['blur_kernel_min'], params['blur_kernel_max'])
+        blurred_mask = gaussian_blur_wrap_fast(solid_mask, (blur_kernel_size, blur_kernel_size), 0)
+        
+        alpha = random.uniform(params['alpha_min'], params['alpha_max'])
+        return blurred_mask * alpha
+
+    elif effect_function_name == 'local_blur_spots':
+        params = config['local_blur_spots']
+        num_spots = random.randint(params['num_spots_min'], params['num_spots_max'])
+        
+        for _ in range(num_spots):
+            # 1. 每次都生成一个完全随机的中心方向
+            spot_center_direction = np.random.randn(3)
+            spot_center_direction /= np.linalg.norm(spot_center_direction)
+
+            # 2. 计算角距离并绘制“实心”圆
+            dot_product = np.einsum('ijk,k->ij', direction_map, spot_center_direction)
+            angular_distances = np.arccos(np.clip(dot_product, -1.0, 1.0))
+            
+            radius_pixels = random.randint(params['radius_min'], params['radius_max'])
+            angular_radius = (radius_pixels / w) * np.pi
+            
+            solid_mask[angular_distances < angular_radius] = 1.0
+
+        # 3. 对所有独立的实心圆进行一次性模糊
+        mask_blur_kernel = _get_odd_random(params['mask_blur_kernel_min'], params['mask_blur_kernel_max'])
+        blurred_mask = gaussian_blur_wrap_fast(solid_mask, (mask_blur_kernel, mask_blur_kernel), 0)
+        return blurred_mask
+
+    elif effect_function_name == 'add_glare':
+        # 眩光效果通常是单个模糊光斑，保持原有逻辑即可
+        params = config.get('glare', {})
+        center_direction = np.random.randn(3)
+        center_direction /= np.linalg.norm(center_direction)
+        
+        dot_product = np.einsum('ijk,k->ij', direction_map, center_direction)
+        angular_distances = np.arccos(np.clip(dot_product, -1.0, 1.0))
+        
+        radius_pixels = random.randint(params['radius_min'], params['radius_max'])
+        angular_radius = (radius_pixels / w) * np.pi
+        
+        # 直接生成高斯衰减的遮罩
+        sigma = angular_radius / 2.5
+        mask = np.exp(-(angular_distances**2) / (2 * sigma**2))
+        return mask
+            
+    return np.zeros((h, w), dtype=np.float32)
 
 def generate_effect_mask(image, config, effect_function_name):
     """
@@ -42,9 +196,10 @@ def generate_effect_mask(image, config, effect_function_name):
             offset_x = random.randint(-params['offset_max'], params['offset_max'])
             offset_y = random.randint(-params['offset_max'], params['offset_max'])
             radius = random.randint(params['radius_min'], params['radius_max'])
-            cv2.circle(mask, (center_x + offset_x, center_y + offset_y), radius, (1.0), -1)
+            _draw_wrapped_circle(mask, center_x + offset_x, center_y + offset_y, radius, (1.0), -1)
+            # cv2.circle(mask, (center_x + offset_x, center_y + offset_y), radius, (1.0), -1)
         blur_kernel_size = _get_odd_random(params['blur_kernel_min'], params['blur_kernel_max'])
-        mask = cv2.GaussianBlur(mask, (blur_kernel_size, blur_kernel_size), 0)
+        mask = gaussian_blur_wrap_fast_color(mask, (blur_kernel_size, blur_kernel_size), 0)
         alpha = random.uniform(params['alpha_min'], params['alpha_max'])
         return mask * alpha
 
@@ -54,9 +209,10 @@ def generate_effect_mask(image, config, effect_function_name):
         for _ in range(num_spots):
             center_x, center_y = random.randint(0, w), random.randint(0, h)
             radius = random.randint(params['radius_min'], params['radius_max'])
-            cv2.circle(mask, (center_x, center_y), radius, (1.0), -1)
+            _draw_wrapped_circle(mask, center_x, center_y, radius, (1.0), -1)
+            # cv2.circle(mask, (center_x, center_y), radius, (1.0), -1)
         mask_blur_kernel = _get_odd_random(params['mask_blur_kernel_min'], params['mask_blur_kernel_max'])
-        mask = cv2.GaussianBlur(mask, (mask_blur_kernel, mask_blur_kernel), 0)
+        mask = gaussian_blur_wrap_fast_color(mask, (mask_blur_kernel, mask_blur_kernel), 0)
         return mask
 
     if effect_function_name == 'add_glare':
@@ -64,10 +220,11 @@ def generate_effect_mask(image, config, effect_function_name):
         center_x, center_y = random.randint(0, w), random.randint(0, h)
         radius = random.randint(params['radius_min'], params['radius_max'])
         
-        cv2.circle(mask, (center_x, center_y), radius, (1.0), -1)
+        _draw_wrapped_circle(mask, center_x, center_y, radius, (1.0), -1)
+        # cv2.circle(mask, (center_x, center_y), radius, (1.0), -1)
         
         blur_amount = _get_odd_random(params['blur_amount_min'], params['blur_amount_max'])
-        mask = cv2.GaussianBlur(mask, (blur_amount, blur_amount), 0)
+        mask = gaussian_blur_wrap_fast_color(mask, (blur_amount, blur_amount), 0)
         
         # 返回的遮罩乘以这个比例，以降低其在总面积计算中的权重
         return mask
@@ -75,8 +232,13 @@ def generate_effect_mask(image, config, effect_function_name):
     return None
 
 
-def add_random_distortions(image_path, config_path, output_path="distorted_image.jpg"):
+def add_random_distortions(image_path, config_path, 
+                           output_path="distorted_image.jpg", chosen_effect_type=None,
+                           debug=True):
     """主函数：读取图像和配置，并根据全局面积限制应用随机干扰。"""
+    def dprint(*args, **kwargs):
+        if debug:
+            print(*args, **kwargs)
     config = load_config(config_path)
     if config is None:
         return
@@ -84,11 +246,15 @@ def add_random_distortions(image_path, config_path, output_path="distorted_image
     try:
         image = cv2.imread(image_path)
         if image is None:
-            print(f"错误: 无法读取图像 {image_path}")
+            dprint(f"错误: 无法读取图像 {image_path}")
             return
     except Exception as e:
-        print(f"读取图像时发生错误: {e}")
+        dprint(f"读取图像时发生错误: {e}")
         return
+
+    dprint("预计算像素方向图...")
+    direction_map = create_direction_map(image.shape[0], image.shape[1])
+    dprint("方向图计算完成。")
 
     # --- 全局面积控制逻辑 ---
     global_params = config.get('global_control', {})
@@ -109,6 +275,17 @@ def add_random_distortions(image_path, config_path, output_path="distorted_image
     other_effects = [
     ]
 
+    # 随机选择一种污损类型用于本次运行
+    if not area_based_effects:
+        dprint("错误：没有在 'area_based_effects' 中定义可用的效果。")
+        return
+    
+    if chosen_effect_type is None:
+        chosen_effect_type = random.choice(area_based_effects)
+        dprint(f"未指定效果类型，随机选择为 '{chosen_effect_type}'")
+    # chosen_effect_type = random.choice(area_based_effects)
+    dprint(f"本次运行将只应用 '{chosen_effect_type}' 类型的污损。")
+
     total_area_ratio = 0.0
     iteration_count = 0
     
@@ -117,17 +294,16 @@ def add_random_distortions(image_path, config_path, output_path="distorted_image
     blur_mask_final = np.zeros(image.shape[:2], dtype=np.float32)
     glare_mask_final = np.zeros(image.shape[:2], dtype=np.float32) # 新增
 
-    print(f"目标污损面积比例: {min_area_ratio:.2%} 到 {max_area_ratio:.2%}")
-    print(f"本次运行随机目标: {target_area_ratio:.2%}") # 打印出本次的目标
+    dprint(f"目标污损面积比例: {min_area_ratio:.2%} 到 {max_area_ratio:.2%}")
+    dprint(f"本次运行随机目标: {target_area_ratio:.2%}") # 打印出本次的目标
 
 
     # 循环添加效果，直到达到最小面积或最大尝试次数
     while total_area_ratio < target_area_ratio and iteration_count < max_iterations:
-        chosen_effect_name = random.choice(area_based_effects)
+        chosen_effect_name = chosen_effect_type
         
         # 1. 生成单个效果的遮罩
-        new_mask = generate_effect_mask(image, config, chosen_effect_name)
-        
+        new_mask = generate_effect_mask_3d(image.shape, config, chosen_effect_name, direction_map)
         # 2. 计算新遮罩的面积
         new_area_ratio = get_mask_area_ratio(new_mask, image.shape)
         if chosen_effect_name == 'add_glare':
@@ -151,58 +327,58 @@ def add_random_distortions(image_path, config_path, output_path="distorted_image
                 # 但为了代码统一，我们还是累加一个遮罩
                 glare_mask_final = np.maximum(glare_mask_final, new_mask)
 
-            print(f"  (迭代 {iteration_count+1}) 添加 '{chosen_effect_name}', 当前总面积: {total_area_ratio:.2%}")
+            dprint(f"  (迭代 {iteration_count+1}) 添加 '{chosen_effect_name}', 当前总面积: {total_area_ratio:.2%}")
         else:
-            print(f"  (迭代 {iteration_count+1}) '{chosen_effect_name}' 面积过大，已跳过。")
+            dprint(f"  (迭代 {iteration_count+1}) '{chosen_effect_name}' 面积过大，已跳过。")
 
         iteration_count += 1
     
     if iteration_count == max_iterations:
-        print(f"警告: 已达到最大尝试次数 {max_iterations}，最终面积为 {total_area_ratio:.2%}")
+        dprint(f"警告: 已达到最大尝试次数 {max_iterations}，最终面积为 {total_area_ratio:.2%}")
 
     # --- 应用所有累积的效果 ---
     distorted_image = image.copy().astype(np.float32)
 
     # 1. 应用局部模糊
     if np.any(blur_mask_final > 0):
-        print(1)
+        # print(1)
         params = config['local_blur_spots']
         blur_kernel_size = _get_odd_random(params['image_blur_kernel_min'], params['image_blur_kernel_max'])
-        blurred_image = cv2.GaussianBlur(image, (blur_kernel_size, blur_kernel_size), 0).astype(np.float32)
-        blur_mask_3ch = cv2.cvtColor(blur_mask_final, cv2.COLOR_GRAY2BGR)
+        blurred_image = gaussian_blur_wrap_fast_color(image, (blur_kernel_size, blur_kernel_size), 0).astype(np.float32)
+        blur_mask_3ch = cv2.cvtColor(blur_mask_final.astype(np.float32), cv2.COLOR_GRAY2BGR)
         distorted_image = distorted_image * (1.0 - blur_mask_3ch) + blurred_image * blur_mask_3ch
 
     # 2. 应用复杂污损
     if np.any(smudge_mask_final > 0):
-        print(2)
+        # print(2)
         smudge_color = np.zeros_like(image, dtype=np.float32)
-        smudge_color[:] = (random.randint(0, 50), random.randint(0, 50), random.randint(0, 50))
-        smudge_mask_3ch = cv2.cvtColor(smudge_mask_final, cv2.COLOR_GRAY2BGR)
+        # smudge_color[:] = (random.randint(0, 50), random.randint(0, 50), random.randint(0, 50))
+        smudge_mask_3ch = cv2.cvtColor(smudge_mask_final.astype(np.float32), cv2.COLOR_GRAY2BGR)
         distorted_image = distorted_image * (1.0 - smudge_mask_3ch) + smudge_color * smudge_mask_3ch
 
     # 3. 应用眩光效果
     if np.any(glare_mask_final > 0):
-        print(3)
+        # print(3)
         params = config['glare']
         brightness = random.uniform(params['brightness_min'], params['brightness_max'])
-        glare_mask_3ch = cv2.cvtColor(glare_mask_final, cv2.COLOR_GRAY2BGR)
+        glare_mask_3ch = cv2.cvtColor(glare_mask_final.astype(np.float32), cv2.COLOR_GRAY2BGR)
         
         # 应用效果
         distorted_image_normalized = distorted_image / 255.0
         distorted_image_normalized = 1 - (1 - distorted_image_normalized) * (1 - glare_mask_3ch * brightness)
         distorted_image = np.clip(distorted_image_normalized * 255, 0, 255)
-        print(f"应用了累积的眩光效果")
+        dprint(f"应用了累积的眩光效果")
 
     # 随机选择一个全局效果应用
     if other_effects:
         chosen_global_function = random.choice(other_effects)
         distorted_image = chosen_global_function(np.uint8(distorted_image), config)
-        print(f"应用了全局效果: {chosen_global_function.__name__}")
+        dprint(f"应用了全局效果: {chosen_global_function.__name__}")
 
     final_image = np.clip(distorted_image, 0, 255).astype(np.uint8)
     cv2.imwrite(output_path, final_image)
-    print(f"处理完成，最终污损面积比例约为: {total_area_ratio:.2%}")
-    print(f"图像已保存至: {output_path}")
+    dprint(f"处理完成，最终污损面积比例约为: {total_area_ratio:.2%}")
+    dprint(f"图像已保存至: {output_path}")
 
 def load_config(config_path):
     """从YAML文件加载配置。"""
@@ -238,63 +414,64 @@ def add_smudge_complex(image, config):
         cv2.circle(mask, (center_x + offset_x, center_y + offset_y), radius, (255), -1)
 
     blur_kernel_size = _get_odd_random(params['blur_kernel_min'], params['blur_kernel_max'])
-    mask = cv2.GaussianBlur(mask, (blur_kernel_size, blur_kernel_size), 0)
+    mask = gaussian_blur_wrap_fast_color(mask, (blur_kernel_size, blur_kernel_size), 0)
     
     smudge_color = np.zeros_like(image)
-    smudge_color[:] = (random.randint(0, 50), random.randint(0, 50), random.randint(0, 50))
+    # smudge_color[:] = (random.randint(0, 10), random.randint(0, 10), random.randint(0, 10))
     mask_3ch = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
     
     alpha = mask_3ch.astype(float) / 255.0 * random.uniform(params['alpha_min'], params['alpha_max'])
     distorted_image = image.astype(float) * (1.0 - alpha) + smudge_color.astype(float) * alpha
     return np.uint8(distorted_image)
 
-def add_glare(image, config):
-    """根据配置添加眩光效果。"""
-    params = config['glare']
-    h, w, _ = image.shape
-    center_x, center_y = random.randint(0, w), random.randint(0, h)
-    radius = random.randint(params['radius_min'], params['radius_max'])
-    brightness = random.uniform(params['brightness_min'], params['brightness_max'])
+# def add_glare(image, config):
+#     """根据配置添加眩光效果。"""
+#     params = config['glare']
+#     h, w, _ = image.shape
+#     center_x, center_y = random.randint(0, w), random.randint(0, h)
+#     radius = random.randint(params['radius_min'], params['radius_max'])
+#     brightness = random.uniform(params['brightness_min'], params['brightness_max'])
 
-    glare_mask = np.zeros((h, w), dtype=np.float32)
-    cv2.circle(glare_mask, (center_x, center_y), radius, (1.0), -1)
+#     glare_mask = np.zeros((h, w), dtype=np.float32)
+#     _draw_wrapped_circle(glare_mask, center_x, center_y, radius, (1.0), -1)
+#     # cv2.circle(glare_mask, (center_x, center_y), radius, (1.0), -1)
     
-    blur_amount = _get_odd_random(params['blur_amount_min'], params['blur_amount_max'])
-    glare_mask = cv2.GaussianBlur(glare_mask, (blur_amount, blur_amount), 0)
-    glare_mask_3ch = cv2.cvtColor(glare_mask, cv2.COLOR_GRAY2BGR)
+#     blur_amount = _get_odd_random(params['blur_amount_min'], params['blur_amount_max'])
+#     glare_mask = gaussian_blur_wrap_fast_color(glare_mask, (blur_amount, blur_amount), 0)
+#     glare_mask_3ch = cv2.cvtColor(glare_mask, cv2.COLOR_GRAY2BGR)
 
-    distorted_image = 1 - (1 - image/255.0) * (1 - glare_mask_3ch * brightness)
-    return np.clip(distorted_image * 255, 0, 255).astype(np.uint8)
+#     distorted_image = 1 - (1 - image/255.0) * (1 - glare_mask_3ch * brightness)
+#     return np.clip(distorted_image * 255, 0, 255).astype(np.uint8)
 
-def add_local_blur_spots(image, config):
-    """
-    *** 新的实现 ***
-    在图像的随机圆形区域内应用模糊，模拟镜头污点或水滴。
-    """
-    params = config['local_blur_spots']
-    h, w, _ = image.shape
+# def add_local_blur_spots(image, config):
+#     """
+#     *** 新的实现 ***
+#     在图像的随机圆形区域内应用模糊，模拟镜头污点或水滴。
+#     """
+#     params = config['local_blur_spots']
+#     h, w, _ = image.shape
     
-    # 1. 创建一个高度模糊的图像版本
-    blur_kernel_size = _get_odd_random(params['image_blur_kernel_min'], params['image_blur_kernel_max'])
-    blurred_image = cv2.GaussianBlur(image, (blur_kernel_size, blur_kernel_size), 0)
+#     # 1. 创建一个高度模糊的图像版本
+#     blur_kernel_size = _get_odd_random(params['image_blur_kernel_min'], params['image_blur_kernel_max'])
+#     blurred_image = gaussian_blur_wrap_fast_color(image, (blur_kernel_size, blur_kernel_size), 0)
 
-    # 2. 创建一个遮罩，定义哪些区域应该被模糊
-    mask = np.zeros((h, w), dtype=np.float32)
-    num_spots = random.randint(params['num_spots_min'], params['num_spots_max'])
-    for _ in range(num_spots):
-        center_x, center_y = random.randint(0, w), random.randint(0, h)
-        radius = random.randint(params['radius_min'], params['radius_max'])
-        cv2.circle(mask, (center_x, center_y), radius, (1.0), -1)
+#     # 2. 创建一个遮罩，定义哪些区域应该被模糊
+#     mask = np.zeros((h, w), dtype=np.float32)
+#     num_spots = random.randint(params['num_spots_min'], params['num_spots_max'])
+#     for _ in range(num_spots):
+#         center_x, center_y = random.randint(0, w), random.randint(0, h)
+#         radius = random.randint(params['radius_min'], params['radius_max'])
+#         cv2.circle(mask, (center_x, center_y), radius, (1.0), -1)
 
-    # 3. 对遮罩本身进行模糊，以创建平滑的过渡边缘
-    mask_blur_kernel = _get_odd_random(params['mask_blur_kernel_min'], params['mask_blur_kernel_max'])
-    mask = cv2.GaussianBlur(mask, (mask_blur_kernel, mask_blur_kernel), 0)
-    mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR) # 转换为3通道以便混合
+#     # 3. 对遮罩本身进行模糊，以创建平滑的过渡边缘
+#     mask_blur_kernel = _get_odd_random(params['mask_blur_kernel_min'], params['mask_blur_kernel_max'])
+#     mask = gaussian_blur_wrap_fast_color(mask, (mask_blur_kernel, mask_blur_kernel), 0)
+#     mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR) # 转换为3通道以便混合
 
-    # 4. 使用遮罩将原始图像和模糊图像混合
-    #   遮罩值为1的区域，显示模糊图像；值为0的区域，显示原始图像。
-    distorted_image = image.astype(float) * (1.0 - mask) + blurred_image.astype(float) * mask
-    return np.clip(distorted_image, 0, 255).astype(np.uint8)
+#     # 4. 使用遮罩将原始图像和模糊图像混合
+#     #   遮罩值为1的区域，显示模糊图像；值为0的区域，显示原始图像。
+#     distorted_image = image.astype(float) * (1.0 - mask) + blurred_image.astype(float) * mask
+#     return np.clip(distorted_image, 0, 255).astype(np.uint8)
 
 # --- 使用示例 ---
 if __name__ == '__main__':
@@ -302,5 +479,12 @@ if __name__ == '__main__':
     config_file = "add_dirt_config.yaml"
     output_image_file = "distorted_output_controlled.png"
     
+    pending_effects = [
+        'smudge_complex',
+        'local_blur_spots',
+        'add_glare'
+    ]
+
     # 主函数不再需要 num_distortions 参数
-    add_random_distortions(input_image_file, config_file, output_image_file)
+    add_random_distortions(input_image_file, config_file, output_image_file, 
+                           chosen_effect_type='local_blur_spots')

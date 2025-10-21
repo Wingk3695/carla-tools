@@ -104,18 +104,30 @@ class ClassVehicleUnit(object):
         self.__local_val_constant_velocity = None
         return local_val_command_batch
 
-    def function_init_state(self):
+    def function_init_state(self, traffic_manager: carla.TrafficManager, ignore_rules: bool = False):
         """
         This function starts vehicles which drive type is autopilot.
-
+        :param traffic_manager: The CARLA Traffic Manager instance.
+        :param ignore_rules: If True, set the vehicle to ignore traffic rules.
         :return: carla.command batch
         """
 
         local_val_command_batch = []
-        local_val_command_set_autopilot = carla.command.SetAutopilot
+        # 使用 traffic_manager 的端口来设置自动驾驶
+        local_val_command_set_autopilot = carla.command.SetAutopilot(self.__local_val_actor, True, traffic_manager.get_port())
 
         if self.__local_val_ctrl_type == ENumDriveType.AUTOPILOT:
-            local_val_command_batch.append(local_val_command_set_autopilot(self.__local_val_actor, True))
+            local_val_command_batch.append(local_val_command_set_autopilot)
+            if ignore_rules:
+                # 设置车辆忽略交通规则
+                traffic_manager.ignore_lights_percentage(self.__local_val_actor, 100)
+                traffic_manager.ignore_signs_percentage(self.__local_val_actor, 100)
+                traffic_manager.ignore_vehicles_percentage(self.__local_val_actor, 100)
+                # 允许车辆超速 (例如，比限速快30%)
+                traffic_manager.vehicle_percentage_speed_difference(self.__local_val_actor, -30)
+                # 设置更激进的驾驶行为 (更小的跟车距离)
+                traffic_manager.distance_to_leading_vehicle(self.__local_val_actor, 2.0)
+
         elif self.__local_val_ctrl_type == ENumDriveType.FILE_CONTROL_STEER:
             self.__local_val_actor.enable_constant_velocity(self.__local_val_constant_velocity)
 
@@ -249,19 +261,24 @@ class ClassVehicleManager(object):
         gc.collect()
 
     def function_init_vehicles(self,
-                               parameter_client: carla.Client):
+                               parameter_client: carla.Client,
+                               parameter_ignore_rules_for_autopilot: bool = False):
         """
          This function must be used when sync mode is on.
 
         :param parameter_client: client to start vehicles
+        :param parameter_ignore_rules_for_autopilot: If True, autopilot vehicles will ignore traffic rules.
         :return:
         """
         local_val_command_batch = []
+        traffic_manager = parameter_client.get_trafficmanager() # 获取交通管理器
         for local_val_vehicle_unit in self.__local_val_vehicles:
-            local_val_command_batch.extend(local_val_vehicle_unit.function_init_state())
+            # 传递 TM 和忽略规则的标志
+            local_val_command_batch.extend(local_val_vehicle_unit.function_init_state(traffic_manager, parameter_ignore_rules_for_autopilot))
         for local_val_response in parameter_client.apply_batch_sync(local_val_command_batch, False):
             if local_val_response.error:
                 print(local_val_response.error)
+
 
     def function_flush_vehicles(self,
                                 parameter_client: carla.Client):

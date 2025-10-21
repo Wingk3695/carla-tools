@@ -73,15 +73,53 @@ if __name__ == "__main__":
     cv2.imwrite("diff_inferno.png", diff_with_bar)
     cv2.imwrite("diff.png", diff_gray)
 
-    cv2.namedWindow("result",0)
-    cv2.imshow("result", result)
+    import matplotlib.pyplot as plt
+    # ------------------- 添加对数尺度直方图分析代码 -------------------
 
-    while True:
-        key = cv2.waitKey(1)
-        if key == ord('q'):
-            break
-        elif key == ord('e'):
-            exit(0)
+    # 1. 准备数据 (同上)
+    valid_diff_pixels = diff_gray[imgD_mask.squeeze() == 1]
+
+    # 2. 创建一个新的 Matplotlib figure
+    plt.figure(figsize=(10, 6))
+    plt.hist(valid_diff_pixels.flatten(), bins=256, range=[0, 256])
+
+    # 3. ***** 将 Y 轴设置为对数尺度 *****
+    plt.yscale('log')
+
+    # 4. 添加标题和标签
+    plt.title('Histogram of Pixel Differences (Log Scale, Masked Region)')
+    plt.xlabel('Pixel Difference Value (0-255)')
+    plt.ylabel('Frequency (Number of Pixels) - Log Scale')
+    plt.grid(True)
+    plt.show()
+
+    # ---------------------------------------------------------------
+
+    # cv2.namedWindow("result",0)
+    # cv2.imshow("result", result)
+    # nonzero_mask = diff_gray > 0
+    vals = diff_gray.ravel()
+    mean_val = vals.mean()
+    std_val = vals.std()
+
+    plt.figure(figsize=(8,4))
+    plt.hist(vals, bins=256, range=(0,255), color='gray', alpha=0.8)
+    plt.axvline(mean_val, color='r', linestyle='--', label=f'mean={mean_val:.2f}')
+    plt.axvline(mean_val+std_val, color='b', linestyle=':', label=f'+1σ={mean_val+std_val:.2f}')
+    plt.axvline(mean_val-std_val, color='b', linestyle=':', label=f'-1σ={mean_val-std_val:.2f}')
+    plt.xlabel('Pixel difference (0-255)')
+    plt.ylabel('Count')
+    plt.title('Histogram of pixel-wise abs difference')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('diff_hist.png', dpi=150)
+
+    # while True:
+    #     key = cv2.waitKey(1)
+    #     if key == ord('q'):
+    #         break
+    #     elif key == ord('e'):
+    #         exit(0)
 
 
 

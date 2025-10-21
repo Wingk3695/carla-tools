@@ -204,7 +204,9 @@ class ClassCubemapProcesser(object):
         
     def trans(self, 
               parameter_cube:dict, # N * C * H * W
-              parameter_order):
+              parameter_order,
+              mode = 'bilinear'
+              ):
         
         local_val_target = None
         for local_val_view in parameter_order:
@@ -212,7 +214,7 @@ class ClassCubemapProcesser(object):
             N, _, _, _ = input_cube.shape
             local_val_temp = F.grid_sample(input = input_cube, 
                                            grid = self.local_val_grids[local_val_view].repeat(N, 1, 1, 1), 
-                                           mode='bilinear', padding_mode='zeros', align_corners=False)
+                                           mode = mode, padding_mode='zeros', align_corners=False)
             if local_val_target is None:
                 local_val_target = local_val_temp
             else:

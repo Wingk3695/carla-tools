@@ -102,20 +102,43 @@ def main(args):
         # print(save_dir)
 
         for item in tqdm(post_dataloader):
-            results = post_processer.trans(item['cube'], cube_order)
-            for i in range(len(item['save_name'])):
-                raw_data = results[i].cpu().numpy()
-                if target_type == EnumTargetType['DEPTH']:
-                    np.savez(os.path.join(save_dir,item['save_name'][i]), raw_data)
-                    color_depth = vis_depth(raw_data.squeeze(0))
-                    vis_save_name = item['save_name'][i][0:-4]+'.jpg'
-                    color_depth.save(os.path.join(save_dir,vis_save_name))
-                elif target_type == EnumTargetType['RGB']:
-                    img = raw_data.astype(np.uint8)
-                    img = img.transpose(1, 2, 0)
-                    img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                    img.save(os.path.join(save_dir,item['save_name'][i]))
-                    # cv2.imwrite(, img)
+            # 判断类型
+            if target_type == EnumTargetType['SEMANTIC']:
+                # 语义分割用最近邻插值
+                results = post_processer.trans(item['cube'], cube_order, mode='nearest')
+                for i in range(len(item['save_name'])):
+                    raw_data = results[i].cpu().numpy()
+                    # 直接保存3通道为RGB（后处理只用R通道）
+                    if raw_data.ndim == 3 and raw_data.shape[0] == 3:
+                        # (3, H, W) -> (H, W, 3)
+                        semantic_img = (raw_data).astype(np.uint8).transpose(1, 2, 0)
+                    else:
+                        raise ValueError(f"Unexpected semantic raw_data shape: {raw_data.shape}")
+                    np.savez(os.path.join(save_dir, item['save_name'][i]), semantic_img)
+                    # 可选：保存为png
+                    semantic_img = semantic_img[:,:,2]  # 只保留R通道
+                    semantic_img[semantic_img!=99] = 0
+                    semantic_img[semantic_img==99] = 255
+                    cv2.imwrite(os.path.join(save_dir, item['save_name'][i][:-4] + '.png'), semantic_img)
+                    # 可选：直接可视化
+                    # from vis_semantic import semantic_to_cityscapes_color
+                    # color_img = semantic_to_cityscapes_color(semantic_img[:,:,2])
+                    # cv2.imwrite(os.path.join(save_dir, item['save_name'][i][:-4] + '_color.png'), color_img)
+            else:
+                results = post_processer.trans(item['cube'], cube_order)
+                for i in range(len(item['save_name'])):
+                    raw_data = results[i].cpu().numpy()
+                    if target_type == EnumTargetType['DEPTH']:
+                        np.savez(os.path.join(save_dir,item['save_name'][i]), raw_data)
+                        color_depth = vis_depth(raw_data.squeeze(0))
+                        vis_save_name = item['save_name'][i][0:-4]+'.jpg'
+                        color_depth.save(os.path.join(save_dir,vis_save_name))
+                    elif target_type == EnumTargetType['RGB']:
+                        img = raw_data.astype(np.uint8)
+                        img = img.transpose(1, 2, 0)
+                        img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+                        img.save(os.path.join(save_dir,item['save_name'][i]))
+                        # cv2.imwrite(, img)
 
 if __name__ == '__main__':
     args = get_args()
@@ -123,4 +146,3 @@ if __name__ == '__main__':
 
 
 
-    

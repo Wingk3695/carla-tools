@@ -153,9 +153,18 @@ def generate_traffic(host, port, tm_port=8000, number_of_vehicles=30,
 
     spawn_points = world.get_map().get_spawn_points()
     number_of_spawn_points = len(spawn_points)
+    print(f"[调试] 当前地图车辆生成点数量: {number_of_spawn_points}")
+
+    walker_nav_points = []
+    nav = world.get_map().get_spawn_points()
+    for _ in range(1000):  # 尝试采样1000次
+        loc = world.get_random_location_from_navigation()
+        if loc is not None:
+            walker_nav_points.append(loc)
+    print(f"[调试] 当前地图可用行人导航点采样数量: {len(walker_nav_points)}")
 
     if exclude_spawn_points:
-        spawn_points = [sp for idx, sp in enumerate(spawn_points) if idx not in exclude_spawn_points]
+        spawn_points = [sp for idx, sp in enumerate(spawn_points) if round(sp.location.x, 1) != exclude_spawn_points[0] and round(sp.location.y, 1) != exclude_spawn_points[1]]
         number_of_spawn_points = len(spawn_points)
 
     if number_of_vehicles < number_of_spawn_points:
@@ -428,12 +437,6 @@ def main():
     vehicles_list = []
     walkers_list = []
     all_id = []
-    local_val_tcp_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    local_val_tcp_server_socket.setblocking(True)
-    local_val_tcp_server_socket.bind(("127.0.0.1", 2333))
-    local_val_tcp_server_socket.listen(128)
-    local_val_client_socket, _ = local_val_tcp_server_socket.accept()
-    print('SOCKET')
     
     client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
@@ -481,6 +484,15 @@ def main():
 
         spawn_points = world.get_map().get_spawn_points()
         number_of_spawn_points = len(spawn_points)
+        print(f"[调试] 当前地图车辆生成点数量: {number_of_spawn_points}")
+
+        walker_nav_points = []
+        nav = world.get_map().get_spawn_points()
+        for _ in range(1000):  # 尝试采样1000次
+            loc = world.get_random_location_from_navigation()
+            if loc is not None:
+                walker_nav_points.append(loc)
+        print(f"[调试] 当前地图可用行人导航点采样数量: {len(walker_nav_points)}")
 
         if args.number_of_vehicles < number_of_spawn_points:
             random.shuffle(spawn_points)
