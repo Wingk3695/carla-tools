@@ -23,11 +23,9 @@ glare:
   brightness_max: 1.6      # ...最大亮度
   blur_amount_min: 51     # 眩光模糊核的最小尺寸 (必须是奇数)
   blur_amount_max: 151     # ...最大尺寸 (必须是奇数)
-  # --- 新增：面积贡献比例 ---
-  # 这个比例乘以眩光遮罩的原始面积，得到其在总面积计算中的“有效面积”。
-  area_contribution_ratio: 1
+  area_contribution_ratio: 1  # 面积贡献比例：这个比例乘以眩光遮罩的原始面积，得到其在总面积计算中的“有效面积”。
 
-# 4. 局部模糊点 (Local Blur Spots) - 新效果！
+# 4. 局部模糊点 (Local Blur Spots) 
 local_blur_spots:
   num_spots_min: 5         # 模糊点的最小数量
   num_spots_max: 10        # ...最大数量

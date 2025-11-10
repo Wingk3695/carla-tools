@@ -1,7 +1,7 @@
 @echo off
 
 set scene=small_object_dataset
-set weather=sunny
+set weather=dawn
 
 
 python post_process.py  --num_workers 2^
@@ -9,7 +9,7 @@ python post_process.py  --num_workers 2^
                         --batch_size 8^
                         --sensor_config_json "output\%scene%\configs\sensor_config_old.json"^
                         --raw_data_dir "H:\%scene%\raw_data\%weather%"^
-                        --save_dir "H:\%scene%\post_data\%weather%"
+                        --save_dir "H:\%scene%\post_data_town05\%weather%"
 
 @REM set scene=random_objects_2
 @REM set save_name=random_objects_2

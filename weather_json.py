@@ -1,7 +1,7 @@
 import json
 import os
 
-json_path = r'e:\carla-tools\output\small_object_dataset\configs\scene_config_old.json'
+json_path = r'e:\carla-tools\output\small_object_dataset\configs\scene_config_old_town06.json'
 
 # 预设多组天气
 weather_presets = {
