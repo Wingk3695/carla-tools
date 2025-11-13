@@ -10,10 +10,11 @@ from generate_mask import generate_mask
 post_data_type = ['L', 'R', 'disp', 'mask']
 DATASET = 'small_object_dataset'
 BASELINE = 2.0
+TOWN = 'town05'
 WEATHER = 'sunny'
-raw_data_dir = rf'H:\{DATASET}\raw_data'
-post_data_dir = rf'H:\{DATASET}\post_data_town05\{WEATHER}\pinhole'
-out_data_dir = rf'H:\{DATASET}\dataset\{WEATHER}'
+raw_data_dir = rf'H:\{DATASET}\raw_data\{TOWN}\{WEATHER}'
+post_data_dir = rf'H:\{DATASET}\post_data\{TOWN}\{WEATHER}\pinhole'
+out_data_dir = rf'H:\{DATASET}\dataset\{TOWN}\{WEATHER}'
 
 def distribute_post_data(in_path, out_path):
     depth = np.load(os.path.join(in_path, "ph_depth0_0.npz"))['arr_0'].squeeze(0)
@@ -55,5 +56,3 @@ if __name__ == '__main__':
         out_dataset_dir = os.path.join(out_data_dir, data_type)
         os.makedirs(out_dataset_dir, exist_ok=True)
     distribute_post_data(post_data_dir, out_data_dir)
-
-

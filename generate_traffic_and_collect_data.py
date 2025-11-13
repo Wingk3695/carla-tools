@@ -11,6 +11,7 @@ if __name__ == '__main__':
     
     
     name = 'small_object_dataset'
+    town = 'town05'
     weather_list = ['sunny', 'cloudy', 'dawn']
     weather = 'dawn'
     # 构造不同天气的 scene_config 路径
@@ -20,7 +21,7 @@ if __name__ == '__main__':
         parameter_path_sensor=rf'output\{name}\configs\sensor_config_old.json',
         parameter_path_scene=rf'output\{name}\configs\scene_config_old_{weather}.json',
         # parameter_path_save=rf'output\{name}\raw_data',
-        parameter_path_save=rf'H:{name}\raw_data\{weather}',
+        parameter_path_save=rf'H:{name}\raw_data\{town}\{weather}',
     )
     # name = 'deep360'
     # local_val_simulator_manager = ClassSimulatorManager(
